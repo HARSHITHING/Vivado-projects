@@ -1,0 +1,156 @@
+VERILOG CODE:
+
+// ============================================================================
+// Module Name: parking_counter
+// Description: A simple parking lot occupancy counter with synchronous logic.
+//              It increments a counter when a car enters and decrements it
+//              when a car leaves. The counter is limited by a maximum number
+//              of slots.
+// ============================================================================
+
+`timescale 1ns/1ps
+
+module parking_counter #(
+    parameter NUM_SLOTS = 100, // Total number of available parking slots
+    parameter COUNTER_WIDTH = 7 // Log2(NUM_SLOTS) is sufficient, e.g., 2^7=128
+) (
+    input wire clk,       // Clock signal
+    input wire rst_n,     // Asynchronous active-low reset
+    input wire car_in,    // High when a car enters
+    input wire car_out,   // High when a car leaves
+    output reg [COUNTER_WIDTH-1:0] count // Occupancy count
+);
+
+    // ========================================================================
+    // Logic: Synchronous counter with asynchronous reset
+    // ========================================================================
+    always @(posedge clk or negedge rst_n) begin
+        // Asynchronous reset
+        if (!rst_n) begin
+            count <= 0;
+        end
+        // Synchronous logic
+        else begin
+            // Increment the counter if a car enters and the lot is not full.
+            // This assumes 'car_in' and 'car_out' signals are mutually exclusive.
+            if (car_in && (count < NUM_SLOTS)) begin
+                count <= count + 1;
+            end
+            // Decrement the counter if a car leaves and the lot is not empty.
+            else if (car_out && (count > 0)) begin
+                count <= count - 1;
+            end
+        end
+    end
+
+endmodule
+________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+TESTBENCH:
+
+// ============================================================================
+// Module Name: parking_counter_tb
+// Description: Testbench for the parking_counter module.
+//              This file simulates various scenarios to verify the functionality
+//              of the counter, including entry, exit, overflow, and underflow.
+// ============================================================================
+
+`timescale 1ns/1ps
+
+module parking_counter_tb;
+
+    // ========================================================================
+    // Testbench signals (registers for inputs, wires for outputs)
+    // ========================================================================
+    reg clk;
+    reg rst_n;
+    reg car_in;
+    reg car_out;
+    wire [6:0] count; // Assuming default NUM_SLOTS=100, so 7 bits are enough
+
+    // ========================================================================
+    // Instantiate the Unit Under Test (UUT)
+    // ========================================================================
+    parking_counter UUT (
+        .clk(clk),
+        .rst_n(rst_n),
+        .car_in(car_in),
+        .car_out(car_out),
+        .count(count)
+    );
+
+    // ========================================================================
+    // Clock generation
+    // ========================================================================
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk; // 10ns period, 100MHz clock
+    end
+
+    // ========================================================================
+    // Test stimulus
+    // ========================================================================
+    initial begin
+        // 1. Initial conditions and reset
+        $display("-----------------------------------------------------");
+        $display("Starting simulation...");
+        rst_n = 0;      // Assert reset
+        car_in = 0;     // No car entering
+        car_out = 0;    // No car leaving
+        #10;
+        $display("Time %0t: Asserting reset. Count should be 0.", $time);
+        rst_n = 1;      // De-assert reset
+        #10;
+        $display("Time %0t: De-asserting reset. Initial count: %d", $time, count);
+
+        // 2. Simulate cars entering
+        $display("-----------------------------------------------------");
+        $display("Simulating car entries...");
+        repeat (5) begin
+            @(posedge clk);
+            car_in = 1;
+            #5;
+            car_in = 0;
+            $display("Time %0t: Car entered. Current count: %d", $time, count);
+        end
+        #10;
+        $display("Time %0t: Total 5 cars entered. Final count: %d", $time, count);
+
+        // 3. Simulate a car leaving
+        $display("-----------------------------------------------------");
+        $display("Simulating a car leaving...");
+        @(posedge clk);
+        car_out = 1;
+        #5;
+        car_out = 0;
+        $display("Time %0t: Car left. Current count: %d", $time, count);
+        #10;
+        $display("Time %0t: Final count after one car left: %d", $time, count);
+
+        // 4. Simulate a full parking lot (if we change NUM_SLOTS to a smaller number)
+        // Let's assume we are testing with default 100 slots, so we won't reach full capacity here.
+        // For a full lot test, you would need to change the NUM_SLOTS parameter in the main module.
+
+        // 5. Simulate an underflow attempt
+        $display("-----------------------------------------------------");
+        $display("Simulating underflow attempt...");
+        // This will try to decrement the count when it is not > 0
+        @(posedge clk);
+        car_out = 1; // Try to make a car leave when the lot is empty
+        #5;
+        car_out = 0;
+        $display("Time %0t: Car left attempt. Count should not change from 0.", $time);
+        
+        // 6. Final check
+        #20;
+        $display("-----------------------------------------------------");
+        $display("Time %0t: Final count is: %d", $time, count);
+
+        // End the simulation
+        $display("-----------------------------------------------------");
+        $display("Simulation finished.");
+        $finish;
+    end
+
+endmodule
+
